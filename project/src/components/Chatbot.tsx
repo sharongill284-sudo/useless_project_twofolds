@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback } from 'react';
-import { Send, Zap, Sparkles, Trash2, Cpu, Wifi, Mic, Image as ImageIcon, Paperclip, X, FileText, Square } from 'lucide-react';
-import { generateResponse, generateImageResponse, generateFileResponse, generateVoiceResponse, SUGGESTED_QUESTIONS, AttachmentContext } from '@/lib/sarcasticEngine';
+import { Send, Zap, Sparkles, Trash2, Cpu, Wifi, Image as ImageIcon, Paperclip, X, FileText } from 'lucide-react';
+import { generateResponse, generateImageResponse, generateFileResponse, SUGGESTED_QUESTIONS, AttachmentContext } from '@/lib/sarcasticEngine';
 import Logo from '@/components/Logo';
 
 interface Message {
@@ -10,7 +10,7 @@ interface Message {
   displayedText: string;
   isTyping: boolean;
   attachment?: {
-    type: 'image' | 'file' | 'voice';
+    type: 'image' | 'file';
     name: string;
     previewUrl?: string;
     size?: number;
@@ -18,38 +18,6 @@ interface Message {
 }
 
 let messageCounter = 0;
-
-// Minimal type declarations for Web Speech API (not in standard TS DOM lib)
-interface SpeechRecognitionEvent extends Event {
-  results: {
-    length: number;
-    [index: number]: {
-      length: number;
-      [index: number]: { transcript: string };
-    };
-  };
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  onend: (() => void) | null;
-}
-
-function getSpeechRecognition(): SpeechRecognitionInstance | null {
-  const w = window as unknown as {
-    SpeechRecognition?: { new (): SpeechRecognitionInstance };
-    webkitSpeechRecognition?: { new (): SpeechRecognitionInstance };
-  };
-  const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-  return SR ? new SR() : null;
-}
 
 export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([
@@ -65,27 +33,15 @@ export default function Chatbot() {
   const [isThinking, setIsThinking] = useState(false);
   const [bootComplete, setBootComplete] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<Message['attachment'] | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [interimText, setInterimText] = useState('');
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [inIframe, setInIframe] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const objectUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
-    try {
-      setInIframe(window.self !== window.top);
-    } catch {
-      setInIframe(true);
-    }
     const timer = setTimeout(() => setBootComplete(true), 1200);
     return () => clearTimeout(timer);
   }, []);
@@ -105,10 +61,6 @@ export default function Chatbot() {
     return () => {
       clearAllTimers();
       objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      if (recognitionRef.current) recognitionRef.current.abort();
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
     };
   }, []);
 
@@ -179,12 +131,6 @@ export default function Chatbot() {
           fileSize: attachment.size,
         };
         responseText = generateFileResponse(trimmed, ctx);
-      } else if (attachment?.type === 'voice') {
-        const ctx: AttachmentContext = {
-          type: 'voice',
-          transcript: trimmed,
-        };
-        responseText = generateVoiceResponse(trimmed, ctx);
       } else {
         responseText = generateResponse(trimmed);
       }
@@ -241,150 +187,8 @@ export default function Chatbot() {
     e.target.value = '';
   };
 
-  const stopRecording = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
-    setInterimText('');
-  };
-
-  const handleVoiceToggle = () => {
-    if (isThinking) return;
-
-    if (isRecording) {
-      stopRecording();
-      return;
-    }
-
-    setVoiceError(null);
-    setInterimText('');
-
-    if (inIframe) {
-      setVoiceError('MIC IS BLOCKED IN EMBEDDED PREVIEWS. OPEN THE APP IN A NEW TAB TO USE VOICE.');
-      return;
-    }
-
-    const recognition = getSpeechRecognition();
-
-    if (recognition) {
-      recognition.lang = 'en-US';
-      recognition.continuous = false;
-      recognition.interimResults = true;
-
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let interim = '';
-        let final = '';
-        for (let i = 0; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) {
-            final += result[0].transcript;
-          } else {
-            interim += result[0].transcript;
-          }
-        }
-        if (interim) setInterimText(interim);
-        if (final) {
-          setInput(final);
-          setInterimText('');
-          setPendingAttachment({ type: 'voice', name: 'voice-input.wav' });
-          setIsRecording(false);
-          inputRef.current?.focus();
-        }
-      };
-
-      recognition.onerror = (event: Event) => {
-        const errEvent = event as unknown as { error?: string };
-        const errType = errEvent.error || 'unknown';
-        if (errType === 'not-allowed' || errType === 'service-not-allowed') {
-          setVoiceError('MIC PERMISSION DENIED. CHECK YOUR BROWSER SETTINGS, BABE.');
-        } else if (errType === 'no-speech') {
-          setVoiceError('I HEARD NOTHING. DID YOU ACTUALLY TALK? TRY AGAIN.');
-        } else if (errType === 'network') {
-          setVoiceError('NETWORK ISSUE. YOUR WIFI IS AS UNRELIABLE AS YOUR QUESTIONS.');
-        } else {
-          setVoiceError(`VOICE ERROR: ${errType.toUpperCase()}. TYPICAL.`);
-        }
-        setIsRecording(false);
-        setInterimText('');
-      };
-
-      recognition.onend = () => {
-        setIsRecording(false);
-        setInterimText('');
-      };
-
-      recognitionRef.current = recognition;
-      try {
-        recognition.start();
-        setIsRecording(true);
-      } catch {
-        setVoiceError('VOICE ENGINE FAILED TO START. RUDE.');
-        setIsRecording(false);
-      }
-    } else {
-      // Fallback: use MediaRecorder to capture audio as a voice attachment
-      startMediaRecorderFallback();
-    }
-  };
-
-  const startMediaRecorderFallback = () => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setVoiceError('YOUR BROWSER DOESN\'T SUPPORT VOICE INPUT. UPGRADE OR TYPE LIKE THE REST OF US.');
-      return;
-    }
-
-    navigator.mediaDevices
-      .getUserMedia({ audio: true })
-      .then((stream) => {
-        const recorder = new MediaRecorder(stream);
-        audioChunksRef.current = [];
-
-        recorder.ondataavailable = (e: BlobEvent) => {
-          if (e.data.size > 0) audioChunksRef.current.push(e.data);
-        };
-
-        recorder.onstop = () => {
-          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          const url = URL.createObjectURL(blob);
-          objectUrlsRef.current.push(url);
-          setPendingAttachment({
-            type: 'voice',
-            name: 'voice-input.webm',
-            previewUrl: url,
-            size: blob.size,
-          });
-          stream.getTracks().forEach((t) => t.stop());
-          setIsRecording(false);
-          setInterimText('');
-          setVoiceError('VOICE RECORDED (NO SPEECH-TO-TEXT IN THIS BROWSER). TYPE YOUR QUESTION AND SEND IT WITH THE CLIP.');
-          inputRef.current?.focus();
-        };
-
-        recorder.onerror = () => {
-          setVoiceError('RECORDING FAILED. YOUR MIC IS PROBABLY OFF OR SOMETHING.');
-          setIsRecording(false);
-          setInterimText('');
-          stream.getTracks().forEach((t) => t.stop());
-        };
-
-        mediaRecorderRef.current = recorder;
-        recorder.start();
-        setIsRecording(true);
-      })
-      .catch(() => {
-        setVoiceError('MIC ACCESS DENIED. ALLOW MIC PERMISSION AND TRY AGAIN, BABE.');
-        setIsRecording(false);
-      });
-  };
-
   const handleReset = () => {
     clearAllTimers();
-    if (isRecording) stopRecording();
     messageCounter = 0;
     setMessages([
       {
@@ -398,8 +202,6 @@ export default function Chatbot() {
     setInput('');
     setPendingAttachment(null);
     setIsThinking(false);
-    setVoiceError(null);
-    setInterimText('');
     inputRef.current?.focus();
     setTimeout(() => animateBotMessage(0, "k we're starting over. ask me something. or don't. idc."), 200);
   };
@@ -504,11 +306,7 @@ export default function Chatbot() {
               />
             ) : (
               <div className="flex h-12 w-12 items-center justify-center rounded border border-accent/40 bg-retro-panel">
-                {pendingAttachment.type === 'voice' ? (
-                  <Mic className="h-5 w-5 text-retro-teal" />
-                ) : (
-                  <FileText className="h-5 w-5 text-accent/70" />
-                )}
+                <FileText className="h-5 w-5 text-accent/70" />
               </div>
             )}
             <div className="min-w-0 flex-1">
@@ -523,48 +321,6 @@ export default function Chatbot() {
               onClick={removeAttachment}
               className="flex h-6 w-6 items-center justify-center rounded border border-accent/40 text-accent/70 transition-colors hover:border-accent hover:text-accent-glow"
               aria-label="Remove attachment"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Recording indicator */}
-        {isRecording && (
-          <div className="relative z-20 flex items-center gap-2 border-t border-retro-teal/30 bg-retro-panel/60 px-4 py-2.5">
-            <span className="flex h-5 items-center gap-0.5">
-              <span className="waveform-bar" style={{ animationDelay: '0s' }} />
-              <span className="waveform-bar" style={{ animationDelay: '0.15s' }} />
-              <span className="waveform-bar" style={{ animationDelay: '0.3s' }} />
-              <span className="waveform-bar" style={{ animationDelay: '0.45s' }} />
-            </span>
-            <span className="font-mono text-[10px] tracking-widest text-retro-teal text-glow-teal sm:text-xs">
-              {interimText ? `"${interimText}"` : 'LISTENING... SPEAK NOW (OR DON\'T, IDK)'}
-            </span>
-          </div>
-        )}
-
-        {/* Voice error message */}
-        {voiceError && !isRecording && (
-          <div className="relative z-20 flex items-center gap-2 border-t border-red-500/30 bg-retro-panel/60 px-4 py-2.5">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
-            <span className="font-mono text-[10px] tracking-widest text-red-400 sm:text-xs">
-              {voiceError}
-            </span>
-            {inIframe && (
-              <a
-                href={window.location.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-2 shrink-0 rounded border border-retro-teal/50 px-2 py-0.5 font-mono text-[10px] tracking-widest text-retro-teal transition-colors hover:bg-retro-teal/20"
-              >
-                OPEN IN NEW TAB
-              </a>
-            )}
-            <button
-              onClick={() => setVoiceError(null)}
-              className="ml-auto shrink-0 text-red-400/70 hover:text-red-400"
-              aria-label="Dismiss error"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -589,7 +345,7 @@ export default function Chatbot() {
             placeholder="ask me something... if you must"
             className="flex-1 bg-transparent font-mono text-sm text-retro-cream placeholder:text-retro-cream/30 focus:outline-none sm:text-base"
             autoFocus={bootComplete}
-            disabled={isThinking || isRecording}
+            disabled={isThinking}
           />
           {/* Hidden file inputs */}
           <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
@@ -597,24 +353,6 @@ export default function Chatbot() {
 
           {/* Attachment icons */}
           <div className="flex items-center gap-1 sm:gap-1.5">
-            <button
-              type="button"
-              onClick={handleVoiceToggle}
-              disabled={isThinking}
-              aria-label="Voice input"
-              title="Voice input"
-              className={`group flex h-8 w-8 items-center justify-center rounded border transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
-                isRecording
-                  ? 'border-retro-teal bg-retro-teal/20 animate-glow-pulse'
-                  : 'border-accent/30 bg-retro-panel hover:border-accent hover:bg-accent/20'
-              }`}
-            >
-              {isRecording ? (
-                <Square className="h-3.5 w-3.5 text-retro-teal" />
-              ) : (
-                <Mic className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
-              )}
-            </button>
             <button
               type="button"
               onClick={() => imageInputRef.current?.click()}
@@ -696,11 +434,7 @@ function MessageBubble({ message }: { message: Message }) {
               />
             ) : (
               <div className="flex items-center gap-2 bg-retro-panel-light px-3 py-2">
-                {message.attachment.type === 'voice' ? (
-                  <Mic className="h-4 w-4 text-retro-teal" />
-                ) : (
-                  <FileText className="h-4 w-4 text-accent/70" />
-                )}
+                <FileText className="h-4 w-4 text-accent/70" />
                 <span className="font-mono text-xs text-retro-cream/70">
                   {message.attachment.name}
                 </span>

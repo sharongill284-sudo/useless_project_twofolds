@@ -40,7 +40,7 @@ const GENERIC_SNARKS = [
   "not today, satan.",
 ];
 
-export type AttachmentType = 'image' | 'file' | 'voice';
+export type AttachmentType = 'image' | 'file';
 
 export interface AttachmentContext {
   type: AttachmentType;
@@ -138,17 +138,6 @@ export function generateFileResponse(userMessage: string, ctx: AttachmentContext
   ]);
 }
 
-export function generateVoiceResponse(userMessage: string, ctx: AttachmentContext): string {
-  const transcript = ctx.transcript?.trim();
-  if (transcript) {
-    return generateResponse(transcript);
-  }
-  return pick([
-    `oh you used your voice. how fancy. I heard... something. probably. what did you even say?`,
-    `voice input detected. very modern of you. unfortunately I didn't catch a single word. try again, louder maybe?`,
-    `I "listened" to your voice message. my transcription: [redacted for being too cringe]. just kidding, I got nothing. type it out babe.`,
-  ]);
-}
 
 export function generateResponse(userMessage: string): string {
   const lower = userMessage.toLowerCase().trim();
