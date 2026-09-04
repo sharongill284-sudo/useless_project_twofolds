@@ -66,7 +66,8 @@ export default function Chatbot() {
   const [bootComplete, setBootComplete] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<Message['attachment'] | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [voiceSupported, setVoiceSupported] = useState(true);
+  const [interimText, setInterimText] = useState('');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,10 +75,11 @@ export default function Chatbot() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const objectUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
-    setVoiceSupported(getSpeechRecognition() !== null);
     const timer = setTimeout(() => setBootComplete(true), 1200);
     return () => clearTimeout(timer);
   }, []);
@@ -98,6 +100,9 @@ export default function Chatbot() {
       clearAllTimers();
       objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
       if (recognitionRef.current) recognitionRef.current.abort();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
     };
   }, []);
 
@@ -230,47 +235,145 @@ export default function Chatbot() {
     e.target.value = '';
   };
 
+  const stopRecording = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    setInterimText('');
+  };
+
   const handleVoiceToggle = () => {
     if (isThinking) return;
 
     if (isRecording) {
-      recognitionRef.current?.stop();
+      stopRecording();
       return;
     }
+
+    setVoiceError(null);
+    setInterimText('');
 
     const recognition = getSpeechRecognition();
-    if (!recognition) {
-      setVoiceSupported(false);
+
+    if (recognition) {
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        let interim = '';
+        let final = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            final += result[0].transcript;
+          } else {
+            interim += result[0].transcript;
+          }
+        }
+        if (interim) setInterimText(interim);
+        if (final) {
+          setInput(final);
+          setInterimText('');
+          setPendingAttachment({ type: 'voice', name: 'voice-input.wav' });
+          setIsRecording(false);
+          inputRef.current?.focus();
+        }
+      };
+
+      recognition.onerror = (event: Event) => {
+        const errEvent = event as unknown as { error?: string };
+        const errType = errEvent.error || 'unknown';
+        if (errType === 'not-allowed' || errType === 'service-not-allowed') {
+          setVoiceError('MIC PERMISSION DENIED. CHECK YOUR BROWSER SETTINGS, BABE.');
+        } else if (errType === 'no-speech') {
+          setVoiceError('I HEARD NOTHING. DID YOU ACTUALLY TALK? TRY AGAIN.');
+        } else if (errType === 'network') {
+          setVoiceError('NETWORK ISSUE. YOUR WIFI IS AS UNRELIABLE AS YOUR QUESTIONS.');
+        } else {
+          setVoiceError(`VOICE ERROR: ${errType.toUpperCase()}. TYPICAL.`);
+        }
+        setIsRecording(false);
+        setInterimText('');
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+        setInterimText('');
+      };
+
+      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+        setIsRecording(true);
+      } catch {
+        setVoiceError('VOICE ENGINE FAILED TO START. RUDE.');
+        setIsRecording(false);
+      }
+    } else {
+      // Fallback: use MediaRecorder to capture audio as a voice attachment
+      startMediaRecorderFallback();
+    }
+  };
+
+  const startMediaRecorderFallback = () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setVoiceError('YOUR BROWSER DOESN\'T SUPPORT VOICE INPUT. UPGRADE OR TYPE LIKE THE REST OF US.');
       return;
     }
 
-    recognition.lang = 'en-US';
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        const recorder = new MediaRecorder(stream);
+        audioChunksRef.current = [];
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[0][0].transcript;
-      setInput(transcript);
-      setPendingAttachment({ type: 'voice', name: 'voice-input.wav' });
-      setIsRecording(false);
-      inputRef.current?.focus();
-    };
+        recorder.ondataavailable = (e: BlobEvent) => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        };
 
-    recognition.onerror = () => {
-      setIsRecording(false);
-    };
+        recorder.onstop = () => {
+          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const url = URL.createObjectURL(blob);
+          objectUrlsRef.current.push(url);
+          setPendingAttachment({
+            type: 'voice',
+            name: 'voice-input.webm',
+            previewUrl: url,
+            size: blob.size,
+          });
+          stream.getTracks().forEach((t) => t.stop());
+          setIsRecording(false);
+          setInterimText('');
+          setVoiceError('VOICE RECORDED (NO SPEECH-TO-TEXT IN THIS BROWSER). TYPE YOUR QUESTION AND SEND IT WITH THE CLIP.');
+          inputRef.current?.focus();
+        };
 
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
+        recorder.onerror = () => {
+          setVoiceError('RECORDING FAILED. YOUR MIC IS PROBABLY OFF OR SOMETHING.');
+          setIsRecording(false);
+          setInterimText('');
+          stream.getTracks().forEach((t) => t.stop());
+        };
 
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsRecording(true);
+        mediaRecorderRef.current = recorder;
+        recorder.start();
+        setIsRecording(true);
+      })
+      .catch(() => {
+        setVoiceError('MIC ACCESS DENIED. ALLOW MIC PERMISSION AND TRY AGAIN, BABE.');
+        setIsRecording(false);
+      });
   };
 
   const handleReset = () => {
     clearAllTimers();
+    if (isRecording) stopRecording();
     messageCounter = 0;
     setMessages([
       {
@@ -284,6 +387,8 @@ export default function Chatbot() {
     setInput('');
     setPendingAttachment(null);
     setIsThinking(false);
+    setVoiceError(null);
+    setInterimText('');
     inputRef.current?.focus();
     setTimeout(() => animateBotMessage(0, "k we're starting over. ask me something. or don't. idc."), 200);
   };
@@ -416,10 +521,32 @@ export default function Chatbot() {
         {/* Recording indicator */}
         {isRecording && (
           <div className="relative z-20 flex items-center gap-2 border-t border-retro-teal/30 bg-retro-panel/60 px-4 py-2.5">
-            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-retro-teal" style={{ boxShadow: '0 0 8px #36e2c4' }} />
-            <span className="font-mono text-[10px] tracking-widest text-retro-teal text-glow-teal sm:text-xs">
-              LISTENING... SPEAK NOW (OR DON'T, IDK)
+            <span className="flex h-5 items-center gap-0.5">
+              <span className="waveform-bar" style={{ animationDelay: '0s' }} />
+              <span className="waveform-bar" style={{ animationDelay: '0.15s' }} />
+              <span className="waveform-bar" style={{ animationDelay: '0.3s' }} />
+              <span className="waveform-bar" style={{ animationDelay: '0.45s' }} />
             </span>
+            <span className="font-mono text-[10px] tracking-widest text-retro-teal text-glow-teal sm:text-xs">
+              {interimText ? `"${interimText}"` : 'LISTENING... SPEAK NOW (OR DON\'T, IDK)'}
+            </span>
+          </div>
+        )}
+
+        {/* Voice error message */}
+        {voiceError && !isRecording && (
+          <div className="relative z-20 flex items-center gap-2 border-t border-red-500/30 bg-retro-panel/60 px-4 py-2.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+            <span className="font-mono text-[10px] tracking-widest text-red-400 sm:text-xs">
+              {voiceError}
+            </span>
+            <button
+              onClick={() => setVoiceError(null)}
+              className="ml-auto text-red-400/70 hover:text-red-400"
+              aria-label="Dismiss error"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
 
@@ -452,9 +579,9 @@ export default function Chatbot() {
             <button
               type="button"
               onClick={handleVoiceToggle}
-              disabled={isThinking || !voiceSupported}
+              disabled={isThinking}
               aria-label="Voice input"
-              title={voiceSupported ? 'Voice input' : 'Voice not supported in this browser'}
+              title="Voice input"
               className={`group flex h-8 w-8 items-center justify-center rounded border transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
                 isRecording
                   ? 'border-retro-teal bg-retro-teal/20 animate-glow-pulse'
