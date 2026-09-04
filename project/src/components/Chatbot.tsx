@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback } from 'react';
-import { Send, Zap, Sparkles, Trash2, Cpu, Wifi, Mic, Image, Paperclip } from 'lucide-react';
-import { generateResponse, SUGGESTED_QUESTIONS } from '@/lib/sarcasticEngine';
+import { Send, Zap, Sparkles, Trash2, Cpu, Wifi, Mic, Image as ImageIcon, Paperclip, X, FileText, Square } from 'lucide-react';
+import { generateResponse, generateImageResponse, generateFileResponse, generateVoiceResponse, SUGGESTED_QUESTIONS, AttachmentContext } from '@/lib/sarcasticEngine';
 import Logo from '@/components/Logo';
 
 interface Message {
@@ -9,9 +9,47 @@ interface Message {
   text: string;
   displayedText: string;
   isTyping: boolean;
+  attachment?: {
+    type: 'image' | 'file' | 'voice';
+    name: string;
+    previewUrl?: string;
+    size?: number;
+  };
 }
 
 let messageCounter = 0;
+
+// Minimal type declarations for Web Speech API (not in standard TS DOM lib)
+interface SpeechRecognitionEvent extends Event {
+  results: {
+    length: number;
+    [index: number]: {
+      length: number;
+      [index: number]: { transcript: string };
+    };
+  };
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onend: (() => void) | null;
+}
+
+function getSpeechRecognition(): SpeechRecognitionInstance | null {
+  const w = window as unknown as {
+    SpeechRecognition?: { new (): SpeechRecognitionInstance };
+    webkitSpeechRecognition?: { new (): SpeechRecognitionInstance };
+  };
+  const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+  return SR ? new SR() : null;
+}
 
 export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([
@@ -26,11 +64,20 @@ export default function Chatbot() {
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [bootComplete, setBootComplete] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<Message['attachment'] | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(true);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const objectUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
+    setVoiceSupported(getSpeechRecognition() !== null);
     const timer = setTimeout(() => setBootComplete(true), 1200);
     return () => clearTimeout(timer);
   }, []);
@@ -46,7 +93,13 @@ export default function Chatbot() {
     typingTimers.current = [];
   };
 
-  useEffect(() => () => clearAllTimers(), []);
+  useEffect(() => {
+    return () => {
+      clearAllTimers();
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      if (recognitionRef.current) recognitionRef.current.abort();
+    };
+  }, []);
 
   const animateBotMessage = useCallback((msgId: number, fullText: string) => {
     let charIndex = 0;
@@ -70,26 +123,61 @@ export default function Chatbot() {
     typingTimers.current.push(startTimer);
   }, []);
 
-  const sendMessage = (text: string) => {
+  const sendMessage = (text: string, attachment?: Message['attachment']) => {
     const trimmed = text.trim();
-    if (!trimmed || isThinking) return;
+    if ((!trimmed && !attachment) || isThinking) return;
 
     clearAllTimers();
 
     const userMsg: Message = {
       id: messageCounter++,
       role: 'user',
-      text: trimmed,
+      text: trimmed || (attachment ? `[${attachment.type}]` : ''),
       displayedText: trimmed,
       isTyping: false,
+      attachment,
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
+    setPendingAttachment(null);
     setIsThinking(true);
 
     const delay = 600 + Math.random() * 700;
     const timer = setTimeout(() => {
-      const responseText = generateResponse(trimmed);
+      let responseText: string;
+
+      if (attachment?.type === 'image') {
+        const ctx: AttachmentContext = {
+          type: 'image',
+          fileName: attachment.name,
+          fileSize: attachment.size,
+        };
+        if (attachment.previewUrl) {
+          const img = new Image();
+          img.onload = () => {
+            ctx.imageWidth = img.naturalWidth;
+            ctx.imageHeight = img.naturalHeight;
+          };
+          img.src = attachment.previewUrl;
+        }
+        responseText = generateImageResponse(trimmed, ctx);
+      } else if (attachment?.type === 'file') {
+        const ctx: AttachmentContext = {
+          type: 'file',
+          fileName: attachment.name,
+          fileSize: attachment.size,
+        };
+        responseText = generateFileResponse(trimmed, ctx);
+      } else if (attachment?.type === 'voice') {
+        const ctx: AttachmentContext = {
+          type: 'voice',
+          transcript: trimmed,
+        };
+        responseText = generateVoiceResponse(trimmed, ctx);
+      } else {
+        responseText = generateResponse(trimmed);
+      }
+
       const botMsg: Message = {
         id: messageCounter++,
         role: 'bot',
@@ -106,14 +194,79 @@ export default function Chatbot() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    sendMessage(input);
+    sendMessage(input, pendingAttachment ?? undefined);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      sendMessage(input);
+      sendMessage(input, pendingAttachment ?? undefined);
     }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    const url = URL.createObjectURL(file);
+    objectUrlsRef.current.push(url);
+    setPendingAttachment({
+      type: 'image',
+      name: file.name,
+      previewUrl: url,
+      size: file.size,
+    });
+    e.target.value = '';
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingAttachment({
+      type: 'file',
+      name: file.name,
+      size: file.size,
+    });
+    e.target.value = '';
+  };
+
+  const handleVoiceToggle = () => {
+    if (isThinking) return;
+
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const recognition = getSpeechRecognition();
+    if (!recognition) {
+      setVoiceSupported(false);
+      return;
+    }
+
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      setPendingAttachment({ type: 'voice', name: 'voice-input.wav' });
+      setIsRecording(false);
+      inputRef.current?.focus();
+    };
+
+    recognition.onerror = () => {
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
   };
 
   const handleReset = () => {
@@ -129,9 +282,17 @@ export default function Chatbot() {
       },
     ]);
     setInput('');
+    setPendingAttachment(null);
     setIsThinking(false);
     inputRef.current?.focus();
     setTimeout(() => animateBotMessage(0, "k we're starting over. ask me something. or don't. idc."), 200);
+  };
+
+  const removeAttachment = () => {
+    if (pendingAttachment?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachment.previewUrl);
+    }
+    setPendingAttachment(null);
   };
 
   return (
@@ -216,6 +377,52 @@ export default function Chatbot() {
           </div>
         )}
 
+        {/* Pending attachment preview */}
+        {pendingAttachment && (
+          <div className="relative z-20 flex items-center gap-3 border-t border-accent/30 bg-retro-panel/60 px-4 py-2.5">
+            {pendingAttachment.type === 'image' && pendingAttachment.previewUrl ? (
+              <img
+                src={pendingAttachment.previewUrl}
+                alt={pendingAttachment.name}
+                className="h-12 w-12 rounded border border-accent/40 object-cover"
+              />
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded border border-accent/40 bg-retro-panel">
+                {pendingAttachment.type === 'voice' ? (
+                  <Mic className="h-5 w-5 text-retro-teal" />
+                ) : (
+                  <FileText className="h-5 w-5 text-accent/70" />
+                )}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-mono text-xs text-retro-cream/80">
+                {pendingAttachment.name}
+              </p>
+              <p className="font-mono text-[10px] tracking-widest text-accent/60 uppercase">
+                {pendingAttachment.type} attached
+              </p>
+            </div>
+            <button
+              onClick={removeAttachment}
+              className="flex h-6 w-6 items-center justify-center rounded border border-accent/40 text-accent/70 transition-colors hover:border-accent hover:text-accent-glow"
+              aria-label="Remove attachment"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Recording indicator */}
+        {isRecording && (
+          <div className="relative z-20 flex items-center gap-2 border-t border-retro-teal/30 bg-retro-panel/60 px-4 py-2.5">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-retro-teal" style={{ boxShadow: '0 0 8px #36e2c4' }} />
+            <span className="font-mono text-[10px] tracking-widest text-retro-teal text-glow-teal sm:text-xs">
+              LISTENING... SPEAK NOW (OR DON'T, IDK)
+            </span>
+          </div>
+        )}
+
         {/* Input area */}
         <form
           onSubmit={handleSubmit}
@@ -234,30 +441,48 @@ export default function Chatbot() {
             placeholder="ask me something... if you must"
             className="flex-1 bg-transparent font-mono text-sm text-retro-cream placeholder:text-retro-cream/30 focus:outline-none sm:text-base"
             autoFocus={bootComplete}
-            disabled={isThinking}
+            disabled={isThinking || isRecording}
           />
+          {/* Hidden file inputs */}
+          <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+          <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.csv,.json,.doc,.docx" className="hidden" onChange={handleFileSelect} />
+
           {/* Attachment icons */}
           <div className="flex items-center gap-1 sm:gap-1.5">
             <button
               type="button"
-              disabled={isThinking}
+              onClick={handleVoiceToggle}
+              disabled={isThinking || !voiceSupported}
               aria-label="Voice input"
-              className="group flex h-8 w-8 items-center justify-center rounded border border-accent/30 bg-retro-panel transition-all hover:border-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-30"
+              title={voiceSupported ? 'Voice input' : 'Voice not supported in this browser'}
+              className={`group flex h-8 w-8 items-center justify-center rounded border transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
+                isRecording
+                  ? 'border-retro-teal bg-retro-teal/20 animate-glow-pulse'
+                  : 'border-accent/30 bg-retro-panel hover:border-accent hover:bg-accent/20'
+              }`}
             >
-              <Mic className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
+              {isRecording ? (
+                <Square className="h-3.5 w-3.5 text-retro-teal" />
+              ) : (
+                <Mic className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
+              )}
             </button>
             <button
               type="button"
+              onClick={() => imageInputRef.current?.click()}
               disabled={isThinking}
               aria-label="Attach photo"
+              title="Upload image"
               className="group flex h-8 w-8 items-center justify-center rounded border border-accent/30 bg-retro-panel transition-all hover:border-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-30"
             >
-              <Image className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
+              <ImageIcon className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
             </button>
             <button
               type="button"
+              onClick={() => fileInputRef.current?.click()}
               disabled={isThinking}
               aria-label="Attach file"
+              title="Upload PDF or text file"
               className="group flex h-8 w-8 items-center justify-center rounded border border-accent/30 bg-retro-panel transition-all hover:border-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-30"
             >
               <Paperclip className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
@@ -265,7 +490,7 @@ export default function Chatbot() {
           </div>
           <button
             type="submit"
-            disabled={!input.trim() || isThinking}
+            disabled={(!input.trim() && !pendingAttachment) || isThinking}
             className="retro-btn rounded px-4 py-2 text-xs sm:text-sm"
           >
             <Send className="inline h-4 w-4" />
@@ -309,6 +534,33 @@ function MessageBubble({ message }: { message: Message }) {
           {isUser ? 'YOU' : 'ASK-O-TRON'}
           {isUser && <Sparkles className="h-3 w-3" />}
         </div>
+
+        {/* Attachment preview in message */}
+        {message.attachment && (
+          <div className={`mb-1.5 overflow-hidden rounded-lg border ${
+            isUser ? 'border-retro-teal/40' : 'border-accent/50'
+          }`}>
+            {message.attachment.type === 'image' && message.attachment.previewUrl ? (
+              <img
+                src={message.attachment.previewUrl}
+                alt={message.attachment.name}
+                className="max-h-40 w-auto max-w-full object-cover"
+              />
+            ) : (
+              <div className="flex items-center gap-2 bg-retro-panel-light px-3 py-2">
+                {message.attachment.type === 'voice' ? (
+                  <Mic className="h-4 w-4 text-retro-teal" />
+                ) : (
+                  <FileText className="h-4 w-4 text-accent/70" />
+                )}
+                <span className="font-mono text-xs text-retro-cream/70">
+                  {message.attachment.name}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div
           className={`rounded-lg border px-4 py-2.5 font-mono text-sm leading-relaxed sm:text-base ${
             isUser
