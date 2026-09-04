@@ -40,6 +40,116 @@ const GENERIC_SNARKS = [
   "not today, satan.",
 ];
 
+export type AttachmentType = 'image' | 'file' | 'voice';
+
+export interface AttachmentContext {
+  type: AttachmentType;
+  fileName?: string;
+  fileSize?: number;
+  fileType?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  fileContent?: string;
+  transcript?: string;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+export function generateImageResponse(userMessage: string, ctx: AttachmentContext): string {
+  const dims = ctx.imageWidth && ctx.imageHeight ? ` ${ctx.imageWidth}x${ctx.imageHeight}px` : '';
+  const name = ctx.fileName ? ` "${ctx.fileName}"` : '';
+  const lower = userMessage.toLowerCase().trim();
+  const hasQuestion = lower.includes('?') || lower.includes('what') || lower.includes('describe') || lower.includes('analyze') || lower.length > 0;
+
+  const responses = [
+    `oh WOW. you uploaded an image${name}${dims}. congratulations, you can click a button. anyway, I "analyzed" it and... it's giving nothing. try harder.`,
+    `let me put on my tiny robot glasses and examine this${dims} masterpiece... yeah I see it. it's pixels. lots of them. groundbreaking stuff.`,
+    `I "scanned" your image${name}. my professional assessment? it exists. you're welcome.`,
+    `image received${dims}. I've consulted my vast neural snark network and the verdict is: it's a picture. of something. probably.`,
+    `ok I "looked" at it. here's my expert analysis: there are colors. maybe shapes. one of them is probably your favorite. riveting.`,
+    `you really thought uploading a picture would change my attitude? cute. anyway${dims} — it's... definitely an image. 10/10 image-ing.`,
+  ];
+
+  if (lower.includes('what') || lower.includes('describe') || lower.includes('analyze') || lower.includes('explain')) {
+    return pick([
+      `you want ME to describe YOUR image${name}? the audacity. fine: it's a collection of pixels arranged in a ${ctx.imageWidth || '???' }x${ctx.imageHeight || '???'} grid. art is subjective and so is my effort.`,
+      `"analyzing" image${dims}... beep boop... ok I got nothing useful. but to be fair, neither did you when you uploaded it.`,
+      `I see... things. stuff. a whole vibe. is that specific enough? no? good, because I'm not a real vision model, babe.`,
+    ]);
+  }
+
+  if (lower.includes('cute') || lower.includes('cute') || lower.includes('pretty') || lower.includes('nice') || lower.includes('good')) {
+    return pick([
+      `you think it's cute? I think it's pixels. we are not the same.${dims}`,
+      `"nice" is subjective. my subjective opinion is: sure, whatever. next.`,
+      `aw you like your own picture. that's adorable. truly. anyway${dims}.`,
+    ]);
+  }
+
+  if (!hasQuestion) {
+    return pick([
+      `you uploaded an image${name}${dims} with no question. bold strategy. what am I supposed to do, guess? actually don't answer that.`,
+      `image received. no question attached. I'm just gonna sit here then. cool cool cool.`,
+      `cool pic${dims}. now what? you want a medal or something? ask me something about it.`,
+    ]);
+  }
+
+  return pick(responses);
+}
+
+export function generateFileResponse(userMessage: string, ctx: AttachmentContext): string {
+  const name = ctx.fileName ? ` "${ctx.fileName}"` : '';
+  const size = ctx.fileSize ? ` (${formatFileSize(ctx.fileSize)})` : '';
+  const isPdf = ctx.fileType?.includes('pdf') || ctx.fileName?.toLowerCase().endsWith('.pdf');
+  const isTxt = ctx.fileType?.includes('text') || ctx.fileName?.toLowerCase().endsWith('.txt');
+  const contentPreview = ctx.fileContent?.slice(0, 200).trim();
+
+  if (isPdf) {
+    return pick([
+      `oh a PDF${name}${size}. my favorite. let me just "read" all those pages... yep, it's a document. full of words. probably boring ones.`,
+      `PDF received${name}${size}. I've "processed" it thoroughly. my findings: it's definitely a PDF. you're welcome for the insight.`,
+      `you uploaded a PDF${name}. do I look like Adobe Reader to you? I "read" it anyway. it says... stuff. probably important to someone. not me though.`,
+    ]);
+  }
+
+  if (isTxt) {
+    if (contentPreview) {
+      const firstLine = contentPreview.split('\n')[0].slice(0, 80);
+      return pick([
+        `ooh a text file${name}${size}. let me "read" it... "${firstLine}..." riveting stuff. really page-turner material. anyway what do you want from me about it?`,
+        `TXT file received${name}. I "skimmed" it. first line says something about "${firstLine}...". sounds like a you problem. ask me something specific maybe?`,
+        `I "read" your text file${name}${size}. here's my summary: "${firstLine}..." and then more words. probably. what's your question?`,
+      ]);
+    }
+    return pick([
+      `text file${name}${size} received. it's empty or I can't read it. either way, not impressed.`,
+      `TXT file${name}. I "read" it. nothing to report. literally nothing. try uploading something with actual content next time.`,
+    ]);
+  }
+
+  return pick([
+    `file received${name}${size}. I have no idea what this is but I'm gonna pretend I do. "analyzing"... done. it's a file. you're welcome.`,
+    `you uploaded something${name}${size}. cool. what am I supposed to do with this? read it? I'm a sarcastic chatbot, not a file viewer.`,
+    `file${name}${size} acquired. my expert analysis: it exists. contains data. probably. what do you want to know about it?`,
+  ]);
+}
+
+export function generateVoiceResponse(userMessage: string, ctx: AttachmentContext): string {
+  const transcript = ctx.transcript?.trim();
+  if (transcript) {
+    return generateResponse(transcript);
+  }
+  return pick([
+    `oh you used your voice. how fancy. I heard... something. probably. what did you even say?`,
+    `voice input detected. very modern of you. unfortunately I didn't catch a single word. try again, louder maybe?`,
+    `I "listened" to your voice message. my transcription: [redacted for being too cringe]. just kidding, I got nothing. type it out babe.`,
+  ]);
+}
+
 export function generateResponse(userMessage: string): string {
   const lower = userMessage.toLowerCase().trim();
 
