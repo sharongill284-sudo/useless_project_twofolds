@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, KeyboardEvent, useCallback } from 'react';
-import { Send, Zap, Sparkles, Trash2, Cpu, Wifi } from 'lucide-react';
+import { Send, Zap, Sparkles, Trash2, Cpu, Wifi, Mic, Image, Paperclip } from 'lucide-react';
 import { generateResponse, SUGGESTED_QUESTIONS } from '@/lib/sarcasticEngine';
+import Logo from '@/components/Logo';
 
 interface Message {
   id: number;
@@ -138,11 +139,11 @@ export default function Chatbot() {
       {/* Header / Branding */}
       <div className={`mb-6 text-center transition-all duration-700 ${bootComplete ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
         <div className="mb-2 flex items-center justify-center gap-3">
-          <Sparkles className="h-6 w-6 text-accent animate-flicker sm:h-7 sm:w-7" />
+          <Logo className="h-10 w-10 animate-flicker sm:h-12 sm:w-12" />
           <h1 className="font-display text-3xl font-black tracking-[0.2em] text-accent text-glow-strong sm:text-5xl">
             ASK-O-TRON
           </h1>
-          <Sparkles className="h-6 w-6 text-accent animate-flicker sm:h-7 sm:w-7" />
+          <Logo className="h-10 w-10 animate-flicker sm:h-12 sm:w-12" />
         </div>
         <p className="font-mono text-sm tracking-[0.3em] text-accent-light/80 text-glow sm:text-base">
           SASSY AND USELESS
@@ -235,6 +236,33 @@ export default function Chatbot() {
             autoFocus={bootComplete}
             disabled={isThinking}
           />
+          {/* Attachment icons */}
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            <button
+              type="button"
+              disabled={isThinking}
+              aria-label="Voice input"
+              className="group flex h-8 w-8 items-center justify-center rounded border border-accent/30 bg-retro-panel transition-all hover:border-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <Mic className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
+            </button>
+            <button
+              type="button"
+              disabled={isThinking}
+              aria-label="Attach photo"
+              className="group flex h-8 w-8 items-center justify-center rounded border border-accent/30 bg-retro-panel transition-all hover:border-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <Image className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
+            </button>
+            <button
+              type="button"
+              disabled={isThinking}
+              aria-label="Attach file"
+              className="group flex h-8 w-8 items-center justify-center rounded border border-accent/30 bg-retro-panel transition-all hover:border-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <Paperclip className="h-4 w-4 text-accent/70 transition-colors group-hover:text-accent-glow" />
+            </button>
+          </div>
           <button
             type="submit"
             disabled={!input.trim() || isThinking}
