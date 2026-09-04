@@ -68,6 +68,7 @@ export default function Chatbot() {
   const [isRecording, setIsRecording] = useState(false);
   const [interimText, setInterimText] = useState('');
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [inIframe, setInIframe] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +81,11 @@ export default function Chatbot() {
   const objectUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
+    try {
+      setInIframe(window.self !== window.top);
+    } catch {
+      setInIframe(true);
+    }
     const timer = setTimeout(() => setBootComplete(true), 1200);
     return () => clearTimeout(timer);
   }, []);
@@ -257,6 +263,11 @@ export default function Chatbot() {
 
     setVoiceError(null);
     setInterimText('');
+
+    if (inIframe) {
+      setVoiceError('MIC IS BLOCKED IN EMBEDDED PREVIEWS. OPEN THE APP IN A NEW TAB TO USE VOICE.');
+      return;
+    }
 
     const recognition = getSpeechRecognition();
 
@@ -536,13 +547,23 @@ export default function Chatbot() {
         {/* Voice error message */}
         {voiceError && !isRecording && (
           <div className="relative z-20 flex items-center gap-2 border-t border-red-500/30 bg-retro-panel/60 px-4 py-2.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
             <span className="font-mono text-[10px] tracking-widest text-red-400 sm:text-xs">
               {voiceError}
             </span>
+            {inIframe && (
+              <a
+                href={window.location.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 shrink-0 rounded border border-retro-teal/50 px-2 py-0.5 font-mono text-[10px] tracking-widest text-retro-teal transition-colors hover:bg-retro-teal/20"
+              >
+                OPEN IN NEW TAB
+              </a>
+            )}
             <button
               onClick={() => setVoiceError(null)}
-              className="ml-auto text-red-400/70 hover:text-red-400"
+              className="ml-auto shrink-0 text-red-400/70 hover:text-red-400"
               aria-label="Dismiss error"
             >
               <X className="h-3.5 w-3.5" />
