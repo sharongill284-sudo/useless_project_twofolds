@@ -50,18 +50,17 @@ For Software:
 
 # Screenshots (Add at least 3)
 <img width="888" height="182" alt="image" src="https://github.com/user-attachments/assets/7eedb46b-9e4e-4568-8f79-ab768a2f22ad" />
-
-*Add caption explaining what this shows*
-
-![Screenshot2](Add screenshot 2 here with proper name)
-*Add caption explaining what this shows*
-
-![Screenshot3](Add screenshot 3 here with proper name)
-*Add caption explaining what this shows*
-
+Home page/main chatbot interface
+![Screenshot2]
+<img width="948" height="407" alt="image" src="https://github.com/user-attachments/assets/33683ff2-e999-4df4-947a-6594d2fcd6f0" />
+Chatbot conversation
+![Screenshot3]
+<img width="835" height="97" alt="image" src="https://github.com/user-attachments/assets/64f169b0-af99-4a8a-b5e5-d9abf4f0e031" />
+additional features like image upload, file uploads
 # Diagrams
-![Workflow](Add your workflow/architecture diagram here)
-*Add caption explaining your workflow*
+![Workflow]:
+<img width="1097" height="693" alt="image" src="https://github.com/user-attachments/assets/68368779-9614-451a-854f-041beea96c9a" />
+Workflow of ASK-A-TRON: From user input to a witty, sarcastic response.
 
 For Hardware:
 
@@ -84,7 +83,7 @@ For Hardware:
 
 ### Project Demo
 # Video
-[Add your demo video link here]
+
 *Explain what the video demonstrates*
 
 # Additional Demos
