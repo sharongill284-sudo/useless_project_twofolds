@@ -6,49 +6,51 @@
 
 
 ## Basic Details
-### Team Name: [Name]
+### Team Name: Twofolds
 
 
 ### Team Members
-- Team Lead: [Name] - [College]
-- Member 2: [Name] - [College]
-- Member 3: [Name] - [College]
+- Team Lead: Sharon Gill Joshy - Jain University
+- Member 2: Akshaya K - Jain University
 
 ### Project Description
-[2-3 lines about what your project does]
-
+ASK-A-TRON is a web based chatbot that interacts with users and responds in a sarcastic ,playful and sassy way. Unlike traditional chatbots that always provide straightforward and humorous answers, it has a way of saying everything sarcastically.
 ### The Problem (that doesn't exist)
-[What ridiculous problem are you solving?]
-
+Sometimes we ask for AI a simple question and get answers longer than our homework. There will be no personality!
 ### The Solution (that nobody asked for)
-[How are you solving it? Keep it fun!]
-
+By creating ASK-O-TRON -- an AI chatbot that answers question with sarcasm, wit, and a little bit of attitude, making conversations with AI much more fun!
 ## Technical Details
 ### Technologies/Components Used
 For Software:
-- [Languages used]
-- [Frameworks used]
-- [Libraries used]
-- [Tools used]
-
+- HTML,Python
+- [frameworks used] :FLASK
+- [Libraries used]: Font awesome
+- [tools used] :VS Code, GitHub, web browser
 For Hardware:
-- [List main components]
-- [List specifications]
-- [List tools required]
+- [List main components]:UI, Image upload system, response display system
+- [List specifications]: minimum 4GB RAM, 1GB free space, Internet conection
+- [List tools required]: code editor, web browser, GitHub
 
 ### Implementation
-For Software:
+For Software:ASK-A-TRON was developed as a web-based chatbot using frontend technologies and AI-based processing.
 # Installation
-[commands]
+[commands]:
+1. Open the project in a web browser.
+2. Ensure an internet connection is available.
+
 
 # Run
-[commands]
+[commands]:
+* Run/Start: Open the website and begin chatting.
+* Image Upload: Upload an image for analysis.
+* File Upload: Upload supported files such as PDF or TXT.
 
 ### Project Documentation
 For Software:
 
 # Screenshots (Add at least 3)
-![Screenshot1](Add screenshot 1 here with proper name)
+<img width="888" height="182" alt="image" src="https://github.com/user-attachments/assets/7eedb46b-9e4e-4568-8f79-ab768a2f22ad" />
+
 *Add caption explaining what this shows*
 
 ![Screenshot2](Add screenshot 2 here with proper name)
