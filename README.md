@@ -62,28 +62,11 @@ additional features like image upload, file uploads
 <img width="1097" height="693" alt="image" src="https://github.com/user-attachments/assets/68368779-9614-451a-854f-041beea96c9a" />
 Workflow of ASK-A-TRON: From user input to a witty, sarcastic response.
 
-For Hardware:
-
-# Schematic & Circuit
-![Circuit](Add your circuit diagram here)
-*Add caption explaining connections*
-
-![Schematic](Add your schematic diagram here)
-*Add caption explaining the schematic*
-
-# Build Photos
-![Components](Add photo of your components here)
-*List out all components shown*
-
-![Build](Add photos of build process here)
-*Explain the build steps*
-
-![Final](Add photo of final product here)
-*Explain the final build*
 
 ### Project Demo
 # Video
-
+![Demo](<video width="640" height="360" controls>
+  <source src="Demomstration.mp4" type="video/mp4"></video>)
 *Explain what the video demonstrates*
 
 # Additional Demos
