@@ -65,12 +65,7 @@ Workflow of ASK-A-TRON: From user input to a witty, sarcastic response.
 
 ### Project Demo
 # Video
-![Demo](<video width="640" height="360" controls>
-  <source src="Demomstration.mp4" type="video/mp4"></video>)
-*Explain what the video demonstrates*
-
-# Additional Demos
-[Add any extra demo materials/links]
+https://github.com/sharongill284-sudo/useless_project_twofolds/blob/main/Demonstration.mp4
 
 ## Team Contributions
 - Sharon Gill Joshy:
