@@ -14,7 +14,7 @@
 - Member 2: Akshaya K - Jain University
 
 ### Project Description
-ASK-A-TRON is a web based chatbot that interacts with users and responds in a sarcastic ,playful and sassy way. Unlike traditional chatbots that always provide straightforward and humorous answers, it has a way of saying everything sarcastically.
+ASK-O-TRON is a web based chatbot that interacts with users and responds in a sarcastic ,playful and sassy way. Unlike traditional chatbots that always provide straightforward and humorous answers, it has a way of saying everything sarcastically.
 ### The Problem (that doesn't exist)
 Sometimes we ask for AI a simple question and get answers longer than our homework. There will be no personality!
 ### The Solution (that nobody asked for)
@@ -32,7 +32,7 @@ For Hardware:
 - [List tools required]: code editor, web browser, GitHub
 
 ### Implementation
-For Software:ASK-A-TRON was developed as a web-based chatbot using frontend technologies and AI-based processing.
+For Software:ASK-O-TRON was developed as a web-based chatbot using frontend technologies and AI-based processing.
 # Installation
 [commands]:
 1. Open the project in a web browser.
