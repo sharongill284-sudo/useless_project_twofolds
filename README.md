@@ -2,7 +2,7 @@
 
 
 
-# [Project Name] 🎯
+# ASK-O-TRON 🎯
 
 
 ## Basic Details
@@ -73,9 +73,17 @@ Workflow of ASK-A-TRON: From user input to a witty, sarcastic response.
 [Add any extra demo materials/links]
 
 ## Team Contributions
-- [Name 1]: [Specific contributions]
-- [Name 2]: [Specific contributions]
-- [Name 3]: [Specific contributions]
+- Sharon Gill Joshy:
+* Developed and designed the user interface.
+* Created the futuristic theme and overall appearance of ASK-A-TRON.
+* Worked on the chatbot’s sarcastic personality and responses.
+* Helped with testing and improving the user experience.
+- Akshaya K:
+ * Worked on the chatbot functionality and user interaction.
+* Helped implement features such as text input, image upload, and file upload.
+* Tested the website and fixed issues.
+* Contributed to the project documentation and presentation.
+
 
 ---
 Made with ❤️ at TinkerHub Useless Projects 
